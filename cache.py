@@ -1,47 +1,67 @@
+from math import log
 
-from __future__ import division
-import sys
+class Line:
+    def __init__(self, size):
+        self.use = -1
+        self.tag = -1
 
-def main():
-    f= open(sys.argv[1],"r+")
-    f1 = f.readlines()      #Process file line by line
+class Cache:
+    def __init__(self, size, block_size, ways):
+        self._lines = [Line(block_size) for i in range(size // block_size)]
+        self._ways = ways  
+        self._size = size 
+        self._block_size = block_size 
 
-    hit=0
-    miss =0
-    write=0
-    cache = []
+    def read(self, address):
+        tag = address >> int(log(self._size // self._ways, 2))  # tag of cache line
+        set = self.get_set(address)  # set of cache line
+        line = None
+        #search according to tag
+        for candidate in set:
+            if candidate.tag == tag:
+                line = candidate
+                break
+        if line:
+                self.update(line, set)
+        #return true if found, otherwise false
+        return True if line else False
 
-    for x in f1:
-        words = x.split()
-        if words[0]=="#eof":
-            break
-        elif words[1]=='W':
-            write=write+1
-        elif words[1]== 'R':
-            if words[2] in cache:
-                hit = hit+1
-            elif len(cache)<32000:
-                miss=miss+1
-                cache.append(words[-1])
-            else:
-                miss=miss+1
-                cache.pop()
-                cache.append(words[-1])
-        else:
-            print("Please input read of write")
+    #Insert into cache line
+    def load(self, address):
+        tag = address >> int(log(self._size // self._ways, 2))  # tag of cache line
+        set = self.get_set(address)  # set of cache line
+        victim = set[0]
+        for index in range(len(set)):
+            if set[index].use < victim.use:
+                victim = set[index]
+        victim.use = 0
+        victim.tag = tag
 
+    def write(self, address):
+        tag = address >> int(log(self._size // self._ways, 2)) # tag of cache line
+        set = self.get_set(address)  # set of cache lines
+        line = None
+        #search according to tag
+        for candidate in set:
+            if candidate.tag == tag:
+                line = candidate
+                break
+        if line:
+            self.update(line, set)
+        #return true if found, otherwise false
+        return True if line else False
 
-    f.close()
-    # for x in range(len(cache)): 
-    #     print cache[x]
-    total=miss+hit
-    miss_ratio=(miss/total)*100
-    print 'Writes: ', write
-    print 'Hit: ', hit, 'and Miss: ', miss
-    print 'Total number of lines: ', total
-    print 'Miss ration: ', miss_ratio
-    print 'Cache size',len(cache) 
+    def update(self, line, set):
+        use = line.use
+        if line.use < self._ways:
+            line.use = self._ways
+            for other in set:
+                if other is not line and other.use > use:
+                    other.use -= 1
 
-
-if __name__ == "__main__":
-    main()
+    def get_set(self, address):
+        setmask = (self._size // (self._block_size * self._ways)) - 1
+        setno = (address >> int(log(self._block_size, 2))) & setmask
+        idx = setno * self._ways
+        sets = self._lines[idx:idx + self._ways]
+        return sets
